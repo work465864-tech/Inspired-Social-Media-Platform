@@ -1,0 +1,5 @@
+project_id = "connectly"
+
+[db.seed]
+enabled = true
+sql_paths = ["./seeds/*.sql"]

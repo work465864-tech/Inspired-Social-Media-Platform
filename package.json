@@ -1,0 +1,22 @@
+{
+  "name": "connectly-platform",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "npm run dev:frontend",
+    "dev:frontend": "npm run dev --workspace connectly --",
+    "dev:backend": "npm run dev --workspace connectly-server",
+    "build": "npm run build --workspace connectly",
+    "lint": "npm run lint --workspace connectly",
+    "test": "npm run test --workspace connectly",
+    "typecheck": "npm run typecheck --workspace connectly",
+    "type-check": "npm run type-check --workspace connectly",
+    "format": "npm run format --workspace connectly",
+    "format:check": "npm run format:check --workspace connectly"
+  }
+}
