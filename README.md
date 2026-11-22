@@ -63,6 +63,21 @@ Authenticated playback, impressions, shares, and profile visits are recorded
 through a bounded client queue and a server-validated Supabase pipeline. See
 the [Creator Studio architecture](./docs/architecture/creator-studio.md).
 
+## Deploy to Netlify
+
+Connect the GitHub repository to Netlify. The root `netlify.toml` configures the
+workspace build command and Next.js output directory. Set these in the Netlify
+site's **Environment variables** before deploying:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+Those two values are required during build. For the corresponding server
+features, also configure `SUPABASE_SERVICE_ROLE_KEY`,
+`ANALYTICS_HASH_SECRET` (at least 32 random characters), and `PIXABAY_API_KEY`.
+Keep service-role and analytics secrets server-only; never add `.env.local` or
+secret values to GitHub. Redeploy after changing environment variables.
+
 ## Setup
 
 ```bash
