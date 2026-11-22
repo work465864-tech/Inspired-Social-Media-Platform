@@ -2,19 +2,18 @@
 
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Heart } from 'lucide-react';
+import type { LikeButtonState } from '../../video/components/VideoActions';
 import { VideoActions } from './VideoActions';
 import { VideoDescription } from './VideoDescription';
 import type { Video } from '../types';
 
 export function VideoOverlay({
-  isLiked,
-  onLike,
+  likeButton,
   onShare,
   showLikeBurst,
   video,
 }: {
-  isLiked: boolean;
-  onLike: () => void;
+  likeButton: LikeButtonState;
   onShare: (method?: 'native' | 'copy' | 'external') => void;
   showLikeBurst: boolean;
   video: Video;
@@ -37,8 +36,7 @@ export function VideoOverlay({
         </div>
         <div className="pointer-events-auto pb-2">
           <VideoActions
-            liked={isLiked}
-            onLike={onLike}
+            likeButton={likeButton}
             onShare={onShare}
             video={video}
           />

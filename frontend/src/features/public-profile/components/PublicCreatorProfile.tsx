@@ -2,6 +2,7 @@ import Image from 'next/image';
 import { BadgeCheck, Heart, LockKeyhole, Play, UsersRound } from 'lucide-react';
 import Link from 'next/link';
 import { Avatar } from '../../../components/ui/display/Avatar';
+import { FollowButton } from '../../follows/components/FollowButton';
 import type { PublicCreatorProfileData } from '../types';
 import { ProfileVisitTracker } from './ProfileVisitTracker';
 import { PublicProfileTabs } from './PublicProfileTabs';
@@ -64,6 +65,9 @@ export function PublicCreatorProfile({
               )}
             </div>
             <p className="mt-1 text-sm text-muted">@{profile.username}</p>
+            <div className="mt-4">
+              <FollowButton targetUserId={profile.id} />
+            </div>
             {profile.bio && (
               <p className="mt-4 max-w-2xl whitespace-pre-wrap text-sm leading-6 text-foreground">
                 {profile.bio}

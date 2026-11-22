@@ -46,7 +46,9 @@ use the configured video-provider API. See the
 The vertical video experience reuses the accessible player controls and adds
 virtualized playback, active-video autoplay, next-video preloading, feed
 gestures, and provider-neutral metadata/actions. Likes and bookmarks in demo
-videos are local presentation state only. See the
+videos are read-only for likes, comments, and follows; demo bookmarks remain
+local presentation state. Supabase-backed videos use persisted likes and
+comments, and expose follow controls on creator profiles and feed cards. See the
 [video player architecture](./docs/architecture/video-player.md).
 
 Authenticated users can upload MP4, MOV, WebM, and M4V videos through a
@@ -139,6 +141,7 @@ Apply all migrations in filename order using the Supabase CLI or SQL Editor:
 13. `supabase/migrations/20261120040000_explore_discovery_indexes.sql`
 14. `supabase/migrations/20261120100000_upload_video_metadata.sql`
 15. `supabase/migrations/20261120110000_follows_realtime.sql`
+16. `supabase/migrations/20261122190000_suggested_profiles_rpc.sql`
 
 The Realtime migrations depend on the tables created by
 `20261117100000_social_core_schema.sql`. If the likes Realtime migration reports
@@ -180,6 +183,12 @@ The follows Realtime migration adds the existing participant-protected
 `public.follows` table to the Supabase Realtime publication. See the
 [Realtime architecture](./docs/architecture/realtime.md) for channel ownership,
 cache reconciliation, presence limits, and verification notes.
+
+The suggested-profiles RPC returns only public creator fields and filters
+inactive, private, already-followed, and blocked accounts without granting
+clients access to protected profile columns. The same migration grants only the
+public verification/privacy flags to client profile reads and filters inactive
+profiles through RLS; email, role, and account-status columns stay restricted.
 
 Configure Supabase Auth Site URL, redirect allowlist, email confirmation/SMTP,
 and Google/GitHub provider credentials before testing those flows. Configure

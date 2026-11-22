@@ -155,7 +155,6 @@ export class SearchService {
     let request = supabase
       .from('profiles')
       .select(profileSelection)
-      .eq('status', 'active')
       .or(`username.ilike.${pattern},full_name.ilike.${pattern}`);
 
     if (verifiedOnly) {

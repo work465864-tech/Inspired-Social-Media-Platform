@@ -135,7 +135,7 @@ describe('SearchService', () => {
     vi.clearAllMocks();
   });
 
-  it('searches active profiles and returns the next username cursor', async () => {
+  it('searches visible profiles and returns the next username cursor', async () => {
     const { builder, client } = createMockClient({
       data: [
         {
@@ -171,6 +171,10 @@ describe('SearchService', () => {
 
     expect(client.from).toHaveBeenCalledWith('profiles');
     expect(builder.calls).toContainEqual({
+      method: 'select',
+      args: ['id,username,full_name,avatar_url,is_verified,is_private,bio'],
+    });
+    expect(builder.calls).not.toContainEqual({
       method: 'eq',
       args: ['status', 'active'],
     });

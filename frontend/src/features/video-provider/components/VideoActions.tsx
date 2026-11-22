@@ -1,13 +1,17 @@
 'use client';
 
-import { Bookmark, Heart, MessageCircle, Share2 } from 'lucide-react';
+import { Bookmark, MessageCircle, Share2 } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useState } from 'react';
+import {
+  CommentButton as PersistentCommentButton,
+  LikeButton,
+  type LikeButtonState,
+} from '../../video/components/VideoActions';
 import type { Video } from '../types';
 
 type VideoActionsProps = {
-  liked: boolean;
-  onLike: () => void;
+  likeButton: LikeButtonState;
   onShare: (method?: 'native' | 'copy' | 'external') => void;
   video: Video;
 };
@@ -20,16 +24,13 @@ function formatCount(count: number): string {
 }
 
 export function VideoActions({
-  liked,
-  onLike,
+  likeButton,
   onShare,
   video,
 }: VideoActionsProps) {
   const reduceMotion = useReducedMotion();
   const [bookmarked, setBookmarked] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
-  const likes = video.likes + (liked ? 1 : 0);
-
   const shareVideo = async () => {
     try {
       if (navigator.share) {
@@ -58,39 +59,28 @@ export function VideoActions({
       aria-label="Video actions"
       className="flex flex-col items-center gap-4"
     >
-      <motion.button
-        aria-label={`${liked ? 'Unlike' : 'Like'} video, ${formatCount(likes)} likes`}
-        aria-pressed={liked}
-        className="flex min-h-12 min-w-12 flex-col items-center justify-center gap-1 rounded-full text-white drop-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-        onClick={(event) => {
-          event.stopPropagation();
-          onLike();
-        }}
-        type="button"
-        whileHover={reduceMotion ? undefined : { scale: 1.08 }}
-        whileTap={reduceMotion ? undefined : { scale: 0.92 }}
-      >
-        <Heart
-          aria-hidden="true"
-          className={`h-7 w-7 ${liked ? 'fill-rose-500 text-rose-400' : ''}`}
-        />
-        <span className="text-[0.6875rem] font-semibold">
-          {formatCount(likes)}
-        </span>
-      </motion.button>
+      <LikeButton {...likeButton} />
 
-      <button
-        aria-disabled="true"
-        aria-label={`Comments unavailable for demo videos, ${formatCount(video.comments)} comments`}
-        className="flex min-h-12 min-w-12 flex-col items-center justify-center gap-1 rounded-full text-white drop-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-        title="Comments are not available for demo videos"
-        type="button"
-      >
-        <MessageCircle aria-hidden="true" className="h-6 w-6" />
-        <span className="text-[0.6875rem] font-semibold">
-          {formatCount(video.comments)}
-        </span>
-      </button>
+      {video.isDemoContent ? (
+        <button
+          aria-label={`Comments unavailable for demo videos, ${formatCount(video.comments)} comments`}
+          className="flex min-h-12 min-w-12 flex-col items-center justify-center gap-1 rounded-full text-white drop-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-60"
+          disabled
+          title="Comments are not available for demo videos"
+          type="button"
+        >
+          <MessageCircle aria-hidden="true" className="h-6 w-6" />
+          <span className="text-[0.6875rem] font-semibold">
+            {formatCount(video.comments)}
+          </span>
+        </button>
+      ) : (
+        <PersistentCommentButton
+          count={formatCount(video.comments)}
+          initialCount={video.comments}
+          videoId={video.id}
+        />
+      )}
 
       <motion.button
         aria-label="Share video"

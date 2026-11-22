@@ -4,6 +4,15 @@
 
 ### Added
 
+- Connected the active hybrid feed to persistent, optimistic likes and
+  comments for Supabase videos, and added working follow controls on creator
+  profiles and feed cards. Pixabay demo content is read-only for likes,
+  comments, and follows.
+- Fixed creator suggestions by replacing a direct read of restricted profile
+  columns with an authenticated, bounded RPC that excludes private, inactive,
+  already-followed, and blocked accounts. Restored safe public verification
+  and privacy flags to profile joins while keeping inactive profiles filtered
+  by RLS and sensitive profile columns restricted.
 - Added the Creator Studio dashboard, analytics charts, paginated content
   management, upload history, metadata editing, and soft deletion.
 - Added authenticated creator telemetry for profile visits, impressions,

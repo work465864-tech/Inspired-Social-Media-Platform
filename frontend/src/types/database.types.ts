@@ -688,6 +688,17 @@ export type Database = {
           likes_count: number;
         }[];
       };
+      get_suggested_profiles: {
+        Args: { suggestion_limit?: number };
+        Returns: {
+          id: string;
+          username: string;
+          full_name: string;
+          avatar_url: string | null;
+          is_verified: boolean;
+          created_at: string;
+        }[];
+      };
       edit_my_comment: {
         Args: { target_comment_id: string; new_content: string };
         Returns: boolean;

@@ -29,11 +29,13 @@ The feed and player expose accessible labels and keyboard instructions;
 controls keep visible focus styles. Reduced-motion preferences disable or
 shorten nonessential transitions.
 
-Double-tapping the video surface displays a like burst and marks the demo video
-as liked. Like and bookmark state are local presentation state; comments are
-unavailable for demo content. The current Pixabay model has no audio-track
-metadata, so the overlay reports that audio details are unavailable rather
-than inventing a track name.
+Supabase-backed videos load the current like state, update it optimistically,
+and reconcile through the shared Realtime layer. Their comment action opens the
+existing comment sheet, and authenticated viewers can follow creators from the
+feed or public profile. Pixabay demo content is read-only for likes, comments,
+and follows; its bookmarks remain local presentation state. The current
+Pixabay model has no audio-track metadata, so the overlay reports that audio
+details are unavailable rather than inventing a track name.
 
 ## Boundaries and verification
 

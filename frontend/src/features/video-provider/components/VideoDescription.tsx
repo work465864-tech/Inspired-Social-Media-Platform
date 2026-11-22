@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Music2 } from 'lucide-react';
 import { paths } from '../../../constants/paths.js';
+import { FollowButton } from '../../follows/components/FollowButton';
 import type { Video } from '../types';
 
 export function VideoDescription({ video }: { video: Video }) {
@@ -43,16 +44,23 @@ export function VideoDescription({ video }: { video: Video }) {
 
   return (
     <div className="min-w-0 space-y-3 text-white">
-      {video.creator.username ? (
-        <Link
-          className="inline-flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-          href={paths.creatorProfile(video.creator.username)}
-        >
-          {creatorContent}
-        </Link>
-      ) : (
-        <div className="inline-flex items-center gap-2.5">{creatorContent}</div>
-      )}
+      <div className="flex items-center justify-between gap-2">
+        {video.creator.username ? (
+          <Link
+            className="inline-flex min-w-0 items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            href={paths.creatorProfile(video.creator.username)}
+          >
+            {creatorContent}
+          </Link>
+        ) : (
+          <div className="inline-flex min-w-0 items-center gap-2.5">
+            {creatorContent}
+          </div>
+        )}
+        {!video.isDemoContent && video.creator.id && (
+          <FollowButton compact targetUserId={video.creator.id} />
+        )}
+      </div>
 
       <div>
         <h2 className="text-base font-semibold leading-snug drop-shadow sm:text-lg">

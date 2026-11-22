@@ -1,5 +1,26 @@
 # Project progress
 
+## Social interactions
+
+**Status: connected in the active feed; live Supabase verification remains.**
+
+- [x] Keep profile editing and public creator profiles as the profile
+      foundation.
+- [x] Connect Supabase video likes and comments to the active hybrid feed.
+- [x] Add follow/request/unfollow controls on creator profiles and
+      Supabase-backed feed cards.
+- [x] Replace the restricted profile-column suggestion query with a bounded
+      RPC that returns only public creator fields.
+- [x] Repair profile joins using limited public-column grants and RLS filtering
+      instead of exposing status, role, or email fields.
+- [x] Keep Pixabay demo videos visibly read-only for likes, comments, and
+      follows.
+- [ ] Apply the documented social-core and suggested-profile migrations in
+      the target Supabase project and verify interactions with authenticated
+      test accounts.
+- [ ] Text-only and image-only posts are not currently implemented; posts in
+      this app are videos.
+
 ## Completed foundation
 
 - Next.js, React, TypeScript, Tailwind CSS, Supabase, and TanStack Query

@@ -3,7 +3,10 @@
 import { useInView } from 'react-intersection-observer';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAuth } from '../../auth/hooks/useAuth';
+import { useLike, useUnlike, useVideoLikes } from '../../likes';
 import { VideoPlayer } from '../../video/components/VideoPlayer';
+import type { LikeButtonState } from '../../video/components/VideoActions';
 import { useVideoAnalyticsTracking } from '../../creator-analytics/hooks/useVideoAnalyticsTracking';
 import type { Video } from '../types';
 import { VideoOverlay } from './VideoOverlay';
@@ -26,8 +29,21 @@ export function VideoCard({
   video,
 }: VideoCardProps) {
   const reduceMotion = useReducedMotion();
-  const [liked, setLiked] = useState(false);
   const [showLikeBurst, setShowLikeBurst] = useState(false);
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const likes = useVideoLikes(video.id, video.likes);
+  const {
+    like: addLike,
+    error: likeMutationError,
+    isPending: isLikePendingState,
+  } = useLike();
+  const {
+    unlike: removeLike,
+    error: unlikeMutationError,
+    isPending: isUnlikePendingState,
+  } = useUnlike();
+  const isLikePending = isLikePendingState || isUnlikePendingState;
+  const liked = !video.isDemoContent && likes.liked;
   const burstTimer = useRef<number | null>(null);
   const impressionTimer = useRef<number | null>(null);
   const analytics = useVideoAnalyticsTracking({
@@ -80,16 +96,91 @@ export function VideoCard({
   }, [active, analytics.trackImpression, inView, intersectionRatio]);
 
   const likeWithBurst = useCallback(() => {
-    setLiked(true);
+    if (
+      video.isDemoContent ||
+      !isAuthenticated ||
+      isAuthLoading ||
+      !likes.isReady ||
+      isLikePending ||
+      liked ||
+      !addLike(video.id)
+    ) {
+      return;
+    }
+
     setShowLikeBurst(true);
     if (burstTimer.current !== null) {
       window.clearTimeout(burstTimer.current);
     }
     burstTimer.current = window.setTimeout(() => setShowLikeBurst(false), 820);
-  }, []);
+  }, [
+    isAuthLoading,
+    isAuthenticated,
+    isLikePending,
+    addLike,
+    liked,
+    likes.isReady,
+    video.id,
+    video.isDemoContent,
+  ]);
   const toggleLike = useCallback(() => {
-    setLiked((current) => !current);
-  }, []);
+    if (
+      video.isDemoContent ||
+      !isAuthenticated ||
+      !likes.isReady ||
+      isLikePending
+    ) {
+      return;
+    }
+    if (liked) {
+      removeLike(video.id);
+    } else {
+      addLike(video.id);
+    }
+  }, [
+    isAuthenticated,
+    isLikePending,
+    addLike,
+    liked,
+    likes.isReady,
+    removeLike,
+    video.id,
+    video.isDemoContent,
+  ]);
+  const likeError =
+    likeMutationError ??
+    unlikeMutationError ??
+    (likes.error instanceof Error ? likes.error : null);
+  const likeButton: LikeButtonState = {
+    count: likes.count,
+    countFallback: video.likes.toLocaleString(),
+    disabled:
+      video.isDemoContent ||
+      !isAuthenticated ||
+      isAuthLoading ||
+      !likes.isReady ||
+      isLikePending,
+    disabledReason: video.isDemoContent
+      ? 'Likes are unavailable for demo videos.'
+      : isAuthLoading
+        ? 'Checking your sign-in status.'
+        : !isAuthenticated
+          ? 'Sign in to like videos.'
+          : !likes.isReady
+            ? 'Loading the current like status.'
+            : isLikePending
+              ? 'Updating like.'
+              : null,
+    error: likeError,
+    isLoading: !video.isDemoContent && (likes.isLoading || isAuthLoading),
+    isPending: isLikePending,
+    isReady: video.isDemoContent || likes.isReady,
+    liked,
+    onRetry: () => {
+      void likes.refetch();
+    },
+    onToggle: toggleLike,
+  };
 
   return (
     <motion.article
@@ -112,8 +203,7 @@ export function VideoCard({
         onPlaybackStateChange={analytics.onPlaybackStateChange}
         overlay={
           <VideoOverlay
-            isLiked={liked}
-            onLike={toggleLike}
+            likeButton={likeButton}
             onShare={analytics.trackShare}
             showLikeBurst={showLikeBurst}
             video={video}

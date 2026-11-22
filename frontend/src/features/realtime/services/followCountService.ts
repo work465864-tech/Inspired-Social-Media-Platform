@@ -1,5 +1,7 @@
 import { createSupabaseBrowserClient } from '../../../lib/supabase/client';
 
+export { followQueryKeys } from '../../follows/constants/queryKeys';
+
 export type FollowCounts = {
   followers: number;
   following: number;
@@ -45,8 +47,3 @@ export async function getMyFollowCounts(
     following: followingResult.count ?? 0,
   };
 }
-
-export const followQueryKeys = {
-  all: ['follows'] as const,
-  myCounts: (userId: string) => ['follows', 'counts', userId] as const,
-};
