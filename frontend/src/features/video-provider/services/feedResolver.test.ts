@@ -33,7 +33,10 @@ function makeDatabaseProvider(candidates: Video[]): DatabaseCandidateProvider {
   return {
     id: 'supabase',
     getCurrentUserId: async () => 'user-1',
-    getCandidates: async () => candidates,
+    getCandidates: async () => ({
+      videos: candidates,
+      unavailableSources: [],
+    }),
     getPage: async (request: VideoPageRequest): Promise<VideoPage> => ({
       items: candidates.slice(
         (request.page - 1) * request.pageSize,
@@ -166,22 +169,62 @@ describe('FeedResolver', () => {
     ]);
   });
 
-  it('reports an error when both providers fail and no cached feed exists', async () => {
-    const database = makeDatabaseProvider([]);
-    database.getCandidates = vi
-      .fn()
-      .mockRejectedValue(new Error('Supabase is unavailable'));
+  it('keeps database results when the fallback source fails', async () => {
+    const databaseVideo = makeVideo('db-1');
+    const database = makeDatabaseProvider([databaseVideo]);
+    database.getCandidates = vi.fn().mockResolvedValue({
+      videos: [databaseVideo],
+      unavailableSources: ['recommended'],
+    });
     const fallback: FeedProvider = {
       id: 'pixabay',
       getPage: vi.fn().mockRejectedValue(new Error('Pixabay is unavailable')),
     };
     const resolver = new FeedResolver(database, fallback, new FeedCache());
 
-    await expect(
-      resolver.resolve(makeRequest(), new AbortController().signal),
-    ).rejects.toMatchObject({
-      status: 503,
-      message: 'The database and fallback video sources are unavailable.',
+    const page = await resolver.resolve(
+      makeRequest(),
+      new AbortController().signal,
+    );
+
+    expect(page.items.map((video) => video.id)).toEqual(['db-1']);
+    expect(page.metadata).toEqual({
+      status: 'partial',
+      unavailableSources: ['recommended', 'pixabay'],
+    });
+  });
+
+  it('returns an empty degraded page when all providers fail', async () => {
+    const database = makeDatabaseProvider([]);
+    database.getCandidates = vi.fn().mockResolvedValue({
+      videos: [],
+      unavailableSources: ['uploads', 'trending', 'following', 'recommended'],
+    });
+    const fallback: FeedProvider = {
+      id: 'pixabay',
+      getPage: vi.fn().mockRejectedValue(new Error('Pixabay is unavailable')),
+    };
+    const resolver = new FeedResolver(database, fallback, new FeedCache());
+
+    const page = await resolver.resolve(
+      makeRequest(),
+      new AbortController().signal,
+    );
+
+    expect(page).toEqual({
+      items: [],
+      nextPage: null,
+      totalHits: 0,
+      metadata: {
+        status: 'unavailable',
+        unavailableSources: [
+          'uploads',
+          'trending',
+          'following',
+          'recommended',
+          'pixabay',
+        ],
+      },
     });
   });
 });

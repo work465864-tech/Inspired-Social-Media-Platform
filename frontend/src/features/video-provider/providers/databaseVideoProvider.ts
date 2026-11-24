@@ -26,7 +26,15 @@ type FollowRow = Pick<Tables<'follows'>, 'following_id'>;
 
 export type DatabaseCandidateProvider = FeedProvider & {
   getCurrentUserId(signal: AbortSignal): Promise<string | null>;
-  getCandidates(userId: string | null, signal: AbortSignal): Promise<Video[]>;
+  getCandidates(
+    userId: string | null,
+    signal: AbortSignal,
+  ): Promise<DatabaseCandidateResult>;
+};
+
+export type DatabaseCandidateResult = {
+  videos: Video[];
+  unavailableSources: string[];
 };
 
 function assertPageRequest(request: VideoPageRequest): void {
@@ -90,7 +98,7 @@ export class DatabaseVideoProvider implements DatabaseCandidateProvider {
   ): Promise<VideoPage> {
     assertPageRequest(request);
     const userId = await this.getCurrentUserId(signal);
-    const candidates = await this.getCandidates(userId, signal);
+    const { videos: candidates } = await this.getCandidates(userId, signal);
     const start = (request.page - 1) * request.pageSize;
     const items = candidates.slice(start, start + request.pageSize);
 
@@ -105,7 +113,7 @@ export class DatabaseVideoProvider implements DatabaseCandidateProvider {
   async getCandidates(
     userId: string | null,
     signal: AbortSignal,
-  ): Promise<Video[]> {
+  ): Promise<DatabaseCandidateResult> {
     const sources: Partial<DatabaseFeedSources> = {};
     const tasks: Array<{
       name: keyof DatabaseFeedSources;
@@ -141,7 +149,7 @@ export class DatabaseVideoProvider implements DatabaseCandidateProvider {
     }
 
     const results = await Promise.allSettled(tasks.map((task) => task.request));
-    const failures: unknown[] = [];
+    const unavailableSources: string[] = [];
     results.forEach((result, index) => {
       const task = tasks[index];
       if (!task) {
@@ -150,7 +158,7 @@ export class DatabaseVideoProvider implements DatabaseCandidateProvider {
       if (result.status === 'fulfilled') {
         sources[task.name] = result.value;
       } else {
-        failures.push(result.reason);
+        unavailableSources.push(task.name);
         console.warn(
           `Hybrid feed ${task.name} source failed:`,
           result.reason instanceof Error
@@ -159,10 +167,6 @@ export class DatabaseVideoProvider implements DatabaseCandidateProvider {
         );
       }
     });
-
-    if (failures.length === tasks.length) {
-      throw new AggregateError(failures, 'All database feed sources failed.');
-    }
 
     const ordered = this.priorityEngine.order({
       uploads: sources.uploads ?? [],
@@ -173,7 +177,10 @@ export class DatabaseVideoProvider implements DatabaseCandidateProvider {
     if (signal.aborted) {
       throw signal.reason ?? new Error('The feed request was cancelled.');
     }
-    return this.toProviderVideos(ordered, signal);
+    return {
+      videos: await this.toProviderVideos(ordered, signal),
+      unavailableSources,
+    };
   }
 
   private async getFollowingVideos(

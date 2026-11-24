@@ -27,6 +27,26 @@ function parsePage(value: string | null): number {
 
 function errorResponse(error: unknown): NextResponse {
   if (error instanceof VideoProviderError) {
+    if (error.code !== 'validation') {
+      console.warn('Video provider unavailable:', {
+        provider: 'pixabay',
+        code: error.code,
+        status: error.status,
+      });
+      return NextResponse.json(
+        {
+          items: [],
+          nextPage: null,
+          totalHits: 0,
+          metadata: {
+            status: 'unavailable',
+            unavailableSources: ['pixabay'],
+          },
+        },
+        { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      );
+    }
+
     const headers = new Headers({ 'Cache-Control': 'no-store' });
     if (error.retryAfterSeconds !== null) {
       headers.set('Retry-After', String(error.retryAfterSeconds));
@@ -72,9 +92,19 @@ export async function handleVideoPageRequest(
           ? await videoService.getTrendingPage(page, request.signal)
           : await videoService.getFeedPage(page, request.signal);
 
-    return NextResponse.json(result, {
-      headers: { 'Cache-Control': publicCacheControl },
-    });
+    return NextResponse.json(
+      {
+        ...result,
+        metadata: result.metadata ?? {
+          status: 'complete',
+          unavailableSources: [],
+        },
+      },
+      {
+        status: 200,
+        headers: { 'Cache-Control': publicCacheControl },
+      },
+    );
   } catch (error) {
     if (request.signal.aborted) {
       return new NextResponse(null, { status: 499 });

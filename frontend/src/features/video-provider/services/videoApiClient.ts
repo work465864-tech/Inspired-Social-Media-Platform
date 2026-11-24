@@ -100,7 +100,7 @@ export class VideoApiClient {
     const parsed = videoPageSchema.safeParse(body);
     if (!parsed.success) {
       throw new VideoProviderError(
-        502,
+        503,
         'provider',
         'The video service returned invalid video data.',
       );

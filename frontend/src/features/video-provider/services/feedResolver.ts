@@ -1,5 +1,5 @@
 import { VideoProviderError } from '../errors';
-import type { VideoPage, VideoPageRequest } from '../types';
+import type { VideoPage, VideoPageMetadata, VideoPageRequest } from '../types';
 import type { FeedProvider } from '../providers/feedProvider';
 import {
   databaseVideoProvider,
@@ -36,6 +36,7 @@ function getPage(
     items,
     nextPage: hasNextPage ? page + 1 : null,
     totalHits: entry.items.length,
+    ...(entry.metadata ? { metadata: entry.metadata } : {}),
   };
 }
 
@@ -72,27 +73,45 @@ export class FeedResolver {
       if (signal.aborted) {
         throw error;
       }
+      console.warn(
+        'Hybrid feed Supabase session lookup failed:',
+        error instanceof Error ? error.message : 'Unknown session error',
+      );
     }
     const cacheKey = userId ?? 'anonymous';
     const previousEntry = this.cache.get(cacheKey);
     let entry = request.page > 1 ? previousEntry : null;
     let databaseError: unknown = null;
+    let databaseUnavailableSources: string[] = [];
 
     if (!entry) {
       let databaseVideos: FeedCacheEntry['databaseVideos'] = [];
       try {
-        databaseVideos = await this.databaseProvider.getCandidates(
+        const result = await this.databaseProvider.getCandidates(
           userId,
           signal,
         );
+        databaseVideos = result.videos;
+        databaseUnavailableSources = result.unavailableSources;
       } catch (error) {
+        if (signal.aborted) {
+          throw error;
+        }
         databaseError = error;
+        console.warn(
+          'Hybrid feed Supabase sources failed:',
+          error instanceof Error ? error.message : 'Unknown database error',
+        );
       }
       entry = createCacheEntry(databaseVideos);
     }
 
     const end = request.page * pageSize;
     let fallbackError: unknown = null;
+    const unavailableSources = new Set([
+      ...(entry.metadata?.unavailableSources ?? []),
+      ...databaseUnavailableSources,
+    ]);
     while (
       entry.items.length < end &&
       !entry.fallbackExhausted &&
@@ -108,9 +127,12 @@ export class FeedResolver {
           },
           signal,
         );
+        for (const source of page.metadata?.unavailableSources ?? []) {
+          unavailableSources.add(source);
+        }
         if (page.nextPage !== null && page.nextPage <= requestedPage) {
           throw new VideoProviderError(
-            502,
+            503,
             'provider',
             'The fallback provider returned an invalid page cursor.',
           );
@@ -123,6 +145,17 @@ export class FeedResolver {
             entry.items.push(video);
           }
         }
+        if (page.metadata?.status === 'unavailable') {
+          fallbackError = new VideoProviderError(
+            503,
+            'provider',
+            'The fallback video source is unavailable.',
+          );
+          unavailableSources.add('pixabay');
+          entry.fallbackExhausted = true;
+          entry.nextFallbackPage = null;
+          break;
+        }
         entry.nextFallbackPage = page.nextPage;
         entry.fallbackExhausted = page.nextPage === null;
       } catch (error) {
@@ -131,6 +164,16 @@ export class FeedResolver {
         }
         fallbackError = error;
         entry.fallbackExhausted = true;
+        entry.nextFallbackPage = null;
+        unavailableSources.add('pixabay');
+        console.warn(
+          'Hybrid feed Pixabay source failed:',
+          error instanceof VideoProviderError
+            ? { code: error.code, status: error.status }
+            : error instanceof Error
+              ? error.message
+              : 'Unknown provider error',
+        );
       }
     }
 
@@ -141,15 +184,21 @@ export class FeedResolver {
       if (cachedPage?.items.length) {
         return cachedPage;
       }
-      if (entry.items.length === 0) {
-        throw new VideoProviderError(
-          503,
-          'provider',
-          databaseError
-            ? 'The database and fallback video sources are unavailable.'
-            : 'The fallback video source is temporarily unavailable.',
-        );
-      }
+    }
+
+    if (databaseError) {
+      unavailableSources.add('supabase');
+    }
+    if (unavailableSources.size > 0) {
+      entry.metadata = {
+        status: entry.items.length > 0 ? 'partial' : 'unavailable',
+        unavailableSources: [...unavailableSources],
+      };
+    } else {
+      entry.metadata = {
+        status: 'complete',
+        unavailableSources: [],
+      } satisfies VideoPageMetadata;
     }
 
     this.cache.set(cacheKey, entry);

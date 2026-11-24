@@ -93,7 +93,7 @@ export class PixabayProvider implements VideoProvider {
       }
       if (!response.ok) {
         throw new VideoProviderError(
-          502,
+          503,
           'provider',
           'The video provider is temporarily unavailable.',
         );
@@ -104,7 +104,7 @@ export class PixabayProvider implements VideoProvider {
         payload = await response.json();
       } catch {
         throw new VideoProviderError(
-          502,
+          503,
           'provider',
           'The video provider returned an invalid response.',
         );
@@ -113,7 +113,7 @@ export class PixabayProvider implements VideoProvider {
       const parsed = pixabayVideoPageSchema.safeParse(payload);
       if (!parsed.success) {
         throw new VideoProviderError(
-          502,
+          503,
           'provider',
           'The video provider returned an invalid response.',
         );

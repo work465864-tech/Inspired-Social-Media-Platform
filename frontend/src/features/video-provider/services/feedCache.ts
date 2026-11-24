@@ -1,10 +1,11 @@
-import type { Video } from '../types';
+import type { Video, VideoPageMetadata } from '../types';
 
 export type FeedCacheEntry = {
   databaseVideos: Video[];
   items: Video[];
   nextFallbackPage: number | null;
   fallbackExhausted: boolean;
+  metadata?: VideoPageMetadata;
   createdAt: number;
 };
 

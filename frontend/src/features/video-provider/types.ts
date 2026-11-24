@@ -42,6 +42,12 @@ export type VideoPage = {
   items: Video[];
   nextPage: number | null;
   totalHits: number;
+  metadata?: VideoPageMetadata;
+};
+
+export type VideoPageMetadata = {
+  status: 'complete' | 'partial' | 'unavailable';
+  unavailableSources: string[];
 };
 
 export type VideoPageRequest = {
@@ -87,4 +93,10 @@ export const videoPageSchema = z.object({
   items: z.array(videoSchema),
   nextPage: z.number().int().positive().nullable(),
   totalHits: z.number().int().nonnegative(),
+  metadata: z
+    .object({
+      status: z.enum(['complete', 'partial', 'unavailable']),
+      unavailableSources: z.array(z.string().min(1).max(80)).max(8),
+    })
+    .optional(),
 });
