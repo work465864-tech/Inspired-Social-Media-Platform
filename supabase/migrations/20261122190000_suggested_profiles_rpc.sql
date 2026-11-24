@@ -72,3 +72,5 @@ on public.profiles
 for select
 to anon, authenticated
 using (status = 'active');
+
+notify pgrst, 'reload schema';

@@ -5,12 +5,9 @@ export const uploadBuckets = {
 } as const;
 
 export const uploadLimits = {
-  maxFileSizeBytes: 200 * 1024 * 1024,
-  maxStoredVideoBytes: 500 * 1024 * 1024,
+  maxFileSizeBytes: 1024 * 1024 * 1024,
+  maxStoredVideoBytes: 1024 * 1024 * 1024,
   maxThumbnailBytes: 5 * 1024 * 1024,
-  maxDurationSeconds: 10 * 60,
-  minResolution: 360,
-  maxResolution: 7680,
   maxTitleLength: 100,
   maxCaptionLength: 2200,
   maxHashtags: 10,

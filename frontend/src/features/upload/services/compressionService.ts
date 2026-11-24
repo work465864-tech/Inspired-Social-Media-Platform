@@ -26,24 +26,13 @@ type CompressionResult = {
   dimensions: { width: number; height: number };
 };
 
-const supportedVideoCodecs = new Set([
-  'av1',
-  'h264',
-  'hevc',
-  'mjpeg',
-  'mpeg4',
-  'prores',
-  'vp8',
-  'vp9',
-]);
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
 function parseProbeData(
   value: unknown,
-  sourceMetadata: VideoProbeMetadata,
+  sourceMetadata: VideoProbeMetadata | null,
   fileSizeBytes: number,
 ): VideoMetadata {
   if (!isRecord(value)) {
@@ -66,40 +55,34 @@ function parseProbeData(
   const videoCodec =
     typeof videoStream?.codec_name === 'string'
       ? videoStream.codec_name.toLowerCase()
-      : '';
+      : 'unknown';
   const audioCodec =
     typeof audioStream?.codec_name === 'string'
       ? audioStream.codec_name.toLowerCase()
       : null;
   const format = isRecord(record.format) ? record.format : {};
 
-  if (!videoCodec || !supportedVideoCodecs.has(videoCodec)) {
-    throw new VideoUploadError(
-      'unsupported_codec',
-      'This video codec is not supported. Choose a standard MP4, MOV, WebM, or M4V video.',
-    );
-  }
-
   const videoWidth =
-    typeof videoStream?.width === 'number' ? videoStream.width : NaN;
+    resolvePixelDimension(videoStream?.width, sourceMetadata?.width) ?? NaN;
   const videoHeight =
-    typeof videoStream?.height === 'number' ? videoStream.height : NaN;
-  if (
-    !Number.isInteger(videoWidth) ||
-    !Number.isInteger(videoHeight) ||
-    videoWidth !== sourceMetadata.width ||
-    videoHeight !== sourceMetadata.height
-  ) {
+    resolvePixelDimension(videoStream?.height, sourceMetadata?.height) ?? NaN;
+  if (!Number.isInteger(videoWidth) || !Number.isInteger(videoHeight)) {
     throw new VideoUploadError(
       'corrupted_file',
-      'The video stream metadata is incomplete or inconsistent.',
+      'FFmpeg and HTML video metadata could not determine positive video frame dimensions. The file may be damaged or use a browser-blocked format.',
     );
   }
 
   const durationSeconds =
     parsePositiveNumber(format.duration) ??
     parsePositiveNumber(videoStream?.duration) ??
-    sourceMetadata.durationMs / 1000;
+    (sourceMetadata ? sourceMetadata.durationMs / 1000 : null);
+  if (!durationSeconds) {
+    throw new VideoUploadError(
+      'corrupted_file',
+      'FFmpeg and HTML video metadata could not determine the video duration.',
+    );
+  }
   return {
     durationMs: Math.round(durationSeconds * 1000),
     width: videoWidth,
@@ -137,6 +120,22 @@ function parsePositiveNumber(value: unknown): number | null {
         ? Number(value)
         : NaN;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function parsePixelDimension(value: unknown): number | null {
+  const parsed = parsePositiveNumber(value);
+  if (parsed === null) {
+    return null;
+  }
+  const rounded = Math.round(parsed);
+  return rounded > 0 ? rounded : null;
+}
+
+export function resolvePixelDimension(
+  ffmpegValue: unknown,
+  browserValue: unknown,
+): number | null {
+  return parsePixelDimension(ffmpegValue) ?? parsePixelDimension(browserValue);
 }
 
 function parseFrameRate(value: unknown): number | null {
@@ -190,26 +189,47 @@ function calculateOutputDimensions(
   };
 }
 
+export function getCompressionBitrateOptions(
+  preset: CompressionPreset,
+  durationMs: number,
+): { videoMaxrateKbps: number; audioBitrateKbps: number } {
+  const durationSeconds = durationMs / 1000;
+  const targetTotalKbps = Math.max(
+    16,
+    Math.floor(
+      (uploadLimits.maxStoredVideoBytes * 8 * 0.9) / durationSeconds / 1000,
+    ),
+  );
+  const audioBitrateKbps = Math.max(
+    8,
+    Math.min(128, Math.floor(targetTotalKbps * 0.12)),
+  );
+  const videoMaxrateKbps = Math.max(
+    8,
+    Math.min(
+      compressionPresets[preset].maxBitrateKbps,
+      targetTotalKbps - audioBitrateKbps,
+    ),
+  );
+  return { videoMaxrateKbps, audioBitrateKbps };
+}
+
 function validateProbedMetadata(metadata: VideoMetadata): void {
-  if (metadata.durationMs > uploadLimits.maxDurationSeconds * 1000) {
-    throw new VideoUploadError(
-      'duration_exceeded',
-      `Videos must be ${Math.floor(uploadLimits.maxDurationSeconds / 60)} minutes or shorter.`,
-    );
-  }
-  if (Math.min(metadata.width, metadata.height) < uploadLimits.minResolution) {
-    throw new VideoUploadError(
-      'resolution_too_low',
-      `Videos must be at least ${uploadLimits.minResolution} pixels on their shorter side.`,
-    );
-  }
   if (
-    metadata.width > uploadLimits.maxResolution ||
-    metadata.height > uploadLimits.maxResolution
+    !Number.isInteger(metadata.width) ||
+    !Number.isInteger(metadata.height) ||
+    metadata.width <= 0 ||
+    metadata.height <= 0
   ) {
     throw new VideoUploadError(
-      'resolution_exceeded',
-      'The video resolution exceeds the supported limit.',
+      'corrupted_file',
+      `FFmpeg returned invalid video dimensions: width=${metadata.width}, height=${metadata.height}.`,
+    );
+  }
+  if (!Number.isFinite(metadata.durationMs) || metadata.durationMs <= 0) {
+    throw new VideoUploadError(
+      'corrupted_file',
+      'FFmpeg could not determine a valid video duration.',
     );
   }
 }
@@ -243,6 +263,18 @@ function classifyCompressionFailure(
     return new VideoUploadError(
       'worker_crashed',
       'The video processing worker stopped unexpectedly. Retry processing.',
+    );
+  }
+  if (
+    /unknown decoder|decoder .* not found|unsupported codec|failed to open codec/.test(
+      diagnostic,
+    )
+  ) {
+    return new VideoUploadError(
+      'unsupported_codec',
+      detail
+        ? `FFmpeg cannot decode this video's codec: ${detail}`
+        : 'FFmpeg does not include a decoder for this video codec.',
     );
   }
   return new VideoUploadError(
@@ -438,6 +470,7 @@ class CompressionService {
     file: File,
     sourceFormat: VideoFormat,
     signal: AbortSignal,
+    browserMetadata: VideoProbeMetadata | null = null,
   ): Promise<MediaMetadata> {
     return this.withExclusiveOperation(() =>
       this.withMountedInput(
@@ -446,25 +479,56 @@ class CompressionService {
         signal,
         async (engine, inputPath, outputDirectory) => {
           const probePath = `${outputDirectory}/metadata.json`;
-          const exitCode = await engine.ffprobe(
-            [
-              '-v',
-              'error',
-              '-show_entries',
-              'stream=codec_type,codec_name,width,height,duration,avg_frame_rate,r_frame_rate,bit_rate:format=duration,bit_rate',
-              '-of',
-              'json',
-              inputPath,
-              '-o',
-              probePath,
-            ],
-            -1,
-            { signal },
-          );
-          if (exitCode !== 0) {
+          let probeLogs = '';
+          const logListener = ({ message }: { message: string }) => {
+            probeLogs = `${probeLogs}\n${message}`.slice(-2_000);
+          };
+          engine.on('log', logListener);
+          let exitCode: number;
+          try {
+            exitCode = await engine.ffprobe(
+              [
+                '-v',
+                'error',
+                '-show_entries',
+                'stream=codec_type,codec_name,width,height,duration,avg_frame_rate,r_frame_rate,bit_rate:format=duration,bit_rate',
+                '-of',
+                'json',
+                inputPath,
+                '-o',
+                probePath,
+              ],
+              -1,
+              { signal },
+            );
+          } catch (error) {
+            if (signal.aborted) {
+              throw new VideoUploadError(
+                'cancelled',
+                'Video metadata inspection was cancelled.',
+              );
+            }
+            const detail = getCompressionErrorDetail(error);
             throw new VideoUploadError(
               'corrupted_file',
-              'FFmpeg could not inspect this video.',
+              detail
+                ? `FFmpeg metadata inspection failed: ${detail}`
+                : 'FFmpeg metadata inspection failed before returning a result.',
+            );
+          } finally {
+            engine.off('log', logListener);
+          }
+          if (exitCode !== 0) {
+            const detail = probeLogs.replace(/\s+/g, ' ').trim().slice(-240);
+            const unsupportedCodec =
+              /unknown decoder|decoder .* not found|unsupported codec|failed to open codec/i.test(
+                detail,
+              );
+            throw new VideoUploadError(
+              unsupportedCodec ? 'unsupported_codec' : 'corrupted_file',
+              detail
+                ? `FFmpeg metadata inspection exited with code ${exitCode}: ${detail}`
+                : `FFmpeg metadata inspection exited with code ${exitCode}. The file may be damaged or use an unsupported codec.`,
             );
           }
 
@@ -502,30 +566,37 @@ class CompressionService {
             (stream) => (stream as ProbeStream).codec_type === 'audio',
           ) as ProbeStream | undefined;
           const format = isRecord(record.format) ? record.format : {};
-          const width = parsePositiveNumber(videoStream?.width);
-          const height = parsePositiveNumber(videoStream?.height);
+          const width = resolvePixelDimension(
+            videoStream?.width,
+            browserMetadata?.width,
+          );
+          const height = resolvePixelDimension(
+            videoStream?.height,
+            browserMetadata?.height,
+          );
           const durationSeconds =
             parsePositiveNumber(format.duration) ??
-            parsePositiveNumber(videoStream?.duration);
+            parsePositiveNumber(videoStream?.duration) ??
+            (browserMetadata ? browserMetadata.durationMs / 1000 : null);
           const videoCodec =
             typeof videoStream?.codec_name === 'string'
               ? videoStream.codec_name.toLowerCase()
-              : '';
+              : 'unknown';
           const audioCodec =
             typeof audioStream?.codec_name === 'string'
               ? audioStream.codec_name.toLowerCase()
               : null;
 
-          if (!width || !height || !durationSeconds || !videoCodec) {
+          if (!width || !height) {
             throw new VideoUploadError(
               'corrupted_file',
-              'The video is missing required media metadata.',
+              `FFmpeg returned no usable width or height${browserMetadata ? '' : ', and the browser could not provide fallback dimensions'}.`,
             );
           }
-          if (!supportedVideoCodecs.has(videoCodec)) {
+          if (!durationSeconds) {
             throw new VideoUploadError(
-              'unsupported_codec',
-              'This video codec is not supported.',
+              'corrupted_file',
+              `FFmpeg could not determine video duration${browserMetadata ? '' : ', and the browser could not provide a fallback duration'}.`,
             );
           }
 
@@ -632,6 +703,63 @@ class CompressionService {
             [toBlob(outputData, 'video/mp4')],
             'connectly-preview.mp4',
             { type: 'video/mp4', lastModified: Date.now() },
+          );
+        },
+      ),
+    );
+  }
+
+  async generateThumbnail(
+    file: File,
+    sourceFormat: VideoFormat,
+    captureTimeMs: number,
+    signal: AbortSignal,
+  ): Promise<File> {
+    return this.withExclusiveOperation(() =>
+      this.withMountedInput(
+        file,
+        sourceFormat,
+        signal,
+        async (engine, inputPath, outputDirectory) => {
+          const outputPath = `${outputDirectory}/thumbnail.jpg`;
+          const exitCode = await engine.exec(
+            [
+              '-ss',
+              String(Math.max(0, captureTimeMs / 1000)),
+              '-i',
+              inputPath,
+              '-frames:v',
+              '1',
+              '-vf',
+              'scale=640:640:force_original_aspect_ratio=decrease',
+              '-q:v',
+              '3',
+              outputPath,
+            ],
+            -1,
+            { signal },
+          );
+          if (exitCode !== 0) {
+            throw new VideoUploadError(
+              'thumbnail_failed',
+              'FFmpeg could not decode a frame for the thumbnail.',
+            );
+          }
+
+          const output = await engine.readFile(outputPath);
+          if (typeof output === 'string' || output.length === 0) {
+            throw new VideoUploadError(
+              'thumbnail_failed',
+              'FFmpeg returned an empty thumbnail image.',
+            );
+          }
+          return new File(
+            [toBlob(output, 'image/jpeg')],
+            'connectly-thumbnail.jpg',
+            {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            },
           );
         },
       ),
@@ -774,6 +902,10 @@ class CompressionService {
         }
         validateProbedMetadata(metadata);
         const presetOptions = compressionPresets[preset];
+        const bitrateOptions = getCompressionBitrateOptions(
+          preset,
+          metadata.durationMs,
+        );
         const outputDimensions = calculateOutputDimensions(
           metadata.width,
           metadata.height,
@@ -797,15 +929,15 @@ class CompressionService {
           '-crf',
           String(presetOptions.crf),
           '-maxrate',
-          `${presetOptions.maxBitrateKbps}k`,
+          `${bitrateOptions.videoMaxrateKbps}k`,
           '-bufsize',
-          `${presetOptions.maxBitrateKbps * 2}k`,
+          `${bitrateOptions.videoMaxrateKbps * 2}k`,
           '-pix_fmt',
           'yuv420p',
           '-c:a',
           'aac',
           '-b:a',
-          '128k',
+          `${bitrateOptions.audioBitrateKbps}k`,
           '-movflags',
           '+faststart',
           outputPath,

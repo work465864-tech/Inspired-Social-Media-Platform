@@ -1,5 +1,19 @@
 # Project progress
 
+## Upload pipeline reliability
+
+**Status: client pipeline hardened; live large-file upload remains unverified.**
+
+- [x] Accept MP4, MOV, WebM, and M4V by extension and container signature,
+      treating browser MIME as an unreliable hint.
+- [x] Make HTML metadata optional and use it as an FFmpeg metadata fallback.
+- [x] Remove application duration/resolution cutoffs, raise the per-object
+      limit to 1 GiB, and adapt long-video compression bitrate to that limit.
+- [x] Fall back to FFmpeg frame extraction if browser thumbnail decoding fails.
+- [ ] Apply `20261123100000_expand_video_upload_limit.sql` and verify a roughly
+      500 MB video upload in an authenticated browser against the configured
+      Supabase project and its project-level upload limit.
+
 ## Social interactions
 
 **Status: connected in the active feed; live Supabase verification remains.**

@@ -31,37 +31,43 @@ export class VideoProcessorService implements VideoProcessingAdapter {
 
     try {
       updateStage('validating');
-      const { format } = await validationService.validateFile(
+      const browserProbe = await validationService.validateFile(
         file,
         signal,
         options,
       );
 
       updateStage('metadata');
-      const metadata = await metadataService.extract(file, format, signal);
-      validateMediaMetadata(metadata, options);
+      const metadata = await metadataService.extract(
+        file,
+        browserProbe.format,
+        signal,
+        browserProbe,
+      );
+      validateMediaMetadata(metadata);
+
+      updateStage('thumbnail');
+      const thumbnails = await thumbnailGenerator.generate(
+        file,
+        browserProbe.format,
+        metadata.durationMs,
+        signal,
+      );
 
       updateStage('compression');
       const compressed = await compressionManager.compress(
         file,
-        format,
+        browserProbe.format,
         metadata,
         options.preset ?? 'medium',
         signal,
         (percentage) => onProgress({ stage, percentage }),
       );
 
-      updateStage('thumbnail');
-      const thumbnails = await thumbnailGenerator.generate(
-        file,
-        metadata.durationMs,
-        signal,
-      );
-
       updateStage('preview');
       const previewClip = await previewGenerator.generate(
         file,
-        format,
+        browserProbe.format,
         options.previewDurationSeconds ?? 4,
         signal,
         (percentage) => onProgress({ stage, percentage }),
@@ -78,7 +84,7 @@ export class VideoProcessorService implements VideoProcessingAdapter {
 
       updateStage('completed', 100);
       return {
-        sourceFormat: format,
+        sourceFormat: browserProbe.format,
         metadata,
         thumbnails,
         previewClip,

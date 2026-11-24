@@ -91,7 +91,7 @@ export function DropZone({
           Drop your video here or browse
         </span>
         <span className="mt-1 text-xs text-muted" id={`${inputId}-help`}>
-          MP4, MOV, WebM, or M4V · minimum 360 px on the shorter side · up to{' '}
+          MP4, MOV, WebM, or M4V · no duration cap · up to{' '}
           {Math.floor(uploadLimits.maxFileSizeBytes / 1024 / 1024)} MB
         </span>
       </button>

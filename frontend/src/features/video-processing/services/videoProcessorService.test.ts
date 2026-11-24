@@ -39,6 +39,7 @@ describe('video processor pipeline', () => {
       .mockResolvedValue({
         format: 'm4v',
         metadata: { durationMs: metadata.durationMs, width: 640, height: 360 },
+        metadataIssue: null,
       });
     const probe = vi
       .spyOn(metadataService, 'extract')
@@ -84,12 +85,18 @@ describe('video processor pipeline', () => {
     const invocationOrder = [
       validate.mock.invocationCallOrder[0],
       probe.mock.invocationCallOrder[0],
-      compress.mock.invocationCallOrder[0],
       generateThumbnail.mock.invocationCallOrder[0],
+      compress.mock.invocationCallOrder[0],
       generatePreview.mock.invocationCallOrder[0],
     ];
     expect(invocationOrder).toEqual(
       [...invocationOrder].sort((left, right) => left - right),
+    );
+    expect(probe).toHaveBeenCalledWith(
+      file,
+      'm4v',
+      expect.any(AbortSignal),
+      expect.objectContaining({ metadataIssue: null }),
     );
   });
 });

@@ -686,6 +686,7 @@ export type Database = {
           following_count: number;
           videos_count: number;
           likes_count: number;
+          views_count: number;
         }[];
       };
       get_suggested_profiles: {

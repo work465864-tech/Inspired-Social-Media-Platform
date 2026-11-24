@@ -15,6 +15,7 @@ const publicPaths = new Set([
 ]);
 
 const guestOnlyPaths = new Set(['/login', '/signup', '/register']);
+const publicCreatorProfilePath = /^\/profile\/[^/]+$/;
 
 function copyCookies(source: NextResponse, target: NextResponse): NextResponse {
   for (const cookie of source.cookies.getAll()) {
@@ -30,7 +31,10 @@ function redirectWithCookies(url: URL, response: NextResponse): NextResponse {
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  if (publicPaths.has(pathname) && !guestOnlyPaths.has(pathname)) {
+  if (
+    (publicPaths.has(pathname) || publicCreatorProfilePath.test(pathname)) &&
+    !guestOnlyPaths.has(pathname)
+  ) {
     return NextResponse.next({ request });
   }
 

@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Button from '../../../components/ui/Button';
+import { paths } from '../../../constants/paths.js';
+import { useAuth } from '../../auth/hooks/useAuth';
 import { DialogSurface } from '../../../components/ui/overlay/DialogSurface';
 import { getUploadErrorMessage } from '../services/uploadErrorService';
 import type { CompressionPreset } from '../constants/uploadConfig';
@@ -24,6 +26,7 @@ import {
 
 export function UploadDialog() {
   const router = useRouter();
+  const { profile } = useAuth();
   const upload = useVideoUpload();
   const { add, clear, items: queueItems, update } = useUploadQueue();
   const selectedItemId = useRef<string | null>(null);
@@ -230,6 +233,19 @@ export function UploadDialog() {
             <div className="flex flex-wrap gap-3">
               <Button onClick={() => router.replace('/feed')} size="sm">
                 View feed
+              </Button>
+              <Button
+                onClick={() =>
+                  router.replace(
+                    profile
+                      ? paths.creatorProfile(profile.username)
+                      : paths.profile,
+                  )
+                }
+                size="sm"
+                variant="secondary"
+              >
+                View profile
               </Button>
               <Button onClick={resetUpload} size="sm" variant="secondary">
                 Upload another

@@ -8,44 +8,56 @@ owns the client-side Storage provider boundary.
 ## Upload flow
 
 1. Select an MP4, MOV, WebM, or M4V file using the picker or drop zone.
-2. Validate extension, MIME type when provided, file signature, size, browser
-   decodability, duration, and resolution.
+2. Validate extension, container signature, non-empty size, and the Supabase
+   per-object size ceiling. Browser MIME and HTML metadata are best-effort only.
 3. Use the shared media-processing pipeline. FFmpeg WebAssembly is loaded
-   lazily and reused in its worker to probe metadata and compress video to MP4
-   at 480p, 720p, or 1080p while preserving aspect ratio. Generate a preview
-   clip and JPEG thumbnail/poster assets; the user can choose another frame.
-4. Create an authenticated `videos` draft through `/api/video-uploads`.
+   lazily and reused in its worker to probe metadata. FFmpeg metadata is
+   preferred; available HTML metadata fills fields omitted by FFmpeg. Generate
+   a preview clip and JPEG thumbnail/poster assets; browser frame decoding
+   falls back to FFmpeg.
+4. Compress to MP4 at 480p, 720p, or 1080p while preserving aspect ratio.
+   Long videos get a lower bitrate to target the stored derivative size limit.
+5. Create an authenticated `videos` draft through `/api/video-uploads`.
    The route checks `videos:upload` and records title, description, visibility,
    comment permissions, and a feed-compatible caption.
-5. Request signed Storage upload targets. Upload the original via resumable
+6. Request signed Storage upload targets. Upload the original via resumable
    TUS and upload compressed video and thumbnail to private buckets.
-6. Complete the draft through
+7. Complete the draft through
    `/api/video-uploads/{videoId}/complete`. The server checks draft ownership,
    validates paths and canonical MIME types, verifies each stored object's
    size and stored MIME, writes `video_assets`, links hashtags, and marks the
    video ready. Dimensions and duration are not persisted from client input.
-7. Cancel/failure cleanup removes draft asset rows, Storage objects, and the
+8. Cancel/failure cleanup removes draft asset rows, Storage objects, and the
    draft. Successful completion invalidates the feed query cache.
 
 ## Validation and limits
 
-Client validation accepts `.mp4`, `.mov`, `.webm`, and `.m4v`, requires a
-matching container signature and readable video stream, limits the source to
-200 MB and 10 minutes, and requires at least 360 pixels on the shorter side.
-Dimensions above 7680 pixels are rejected. Storage accepts objects up to
-500 MB and thumbnails up to 5 MB. Compression profiles target 480p, 720p, and
-1080p with bounded bitrates and aspect-preserving dimensions. Titles are
-limited to 100 characters, descriptions to 2200 characters, and hashtags to
-10 slugs of at most 64 lowercase alphanumeric/underscore characters.
+Client validation accepts `.mp4`, `.mov`, `.webm`, and `.m4v` and checks the
+container signature. MIME hints are not trusted because browsers and operating
+systems may report generic types. There is no application duration or
+resolution cutoff; metadata still needs a positive duration and valid frame
+dimensions. Compression scales to a 480p, 720p, or 1080p profile while
+preserving aspect ratio and reduces bitrate for long videos to target an output
+below the storage limit.
 
-Client metadata is used only for the local preview and processing experience;
-it is not used to determine ownership or authorization and is omitted from
-persisted video-asset dimensions and duration. The server verifies
-authenticated ownership, canonical MIME types, byte sizes, and the stored
-objects before the video becomes ready. Stream probing currently occurs in
-the browser, so a modified client can still submit content that the server has
-not decoded. Add an authoritative server-side probe before treating duration
-and dimensions as trusted or persisting them.
+The Supabase video buckets and application enforce a maximum of 1 GiB per
+object (1,073,741,824 bytes), raised by
+`20261123100000_expand_video_upload_limit.sql`. This is a storage constraint,
+not an unlimited-upload promise. A
+Supabase project-level maximum upload size below the bucket limit can still
+reject an upload and must be checked in project settings. Thumbnails are
+limited to 5 MiB. Titles are limited to 100 characters, descriptions to 2200
+characters, and hashtags to 10 slugs of at most 64 lowercase
+alphanumeric/underscore characters.
+
+Client metadata is used only for local preview and processing; it is not used
+to determine ownership or authorization and is omitted from persisted
+video-asset dimensions and duration. The server verifies authenticated
+ownership, canonical MIME types, byte sizes, and stored objects before the
+video becomes ready. Stream probing currently occurs in the browser, so a
+modified client can still submit content that the server has not decoded. Add
+an authoritative server-side probe before treating duration and dimensions as
+trusted or persisting them.
 
 ## Storage layout
 
@@ -83,11 +95,12 @@ implementation.
 
 ## Verification boundary
 
-Unit tests cover client-side resolution/metadata limits, M4V recognition, and
-processing pipeline ordering and metadata reuse. Lint, type-check, tests, and
-production build validate the repository changes. Applying the migration,
-authenticated RLS/permission behavior, Supabase Storage CORS/TUS/signed
-uploads, authoritative server-side probing, FFmpeg in real browsers, and
-mobile/device behavior still require external integration verification.
+Unit tests cover file signatures, browser-to-FFmpeg metadata fallback,
+dimension normalization, long-duration/high-resolution acceptance, adaptive
+bitrate, and processing order. Lint, type-check, tests, and production build
+validate repository changes. Authenticated RLS/permission behavior, Supabase
+project-level upload limits, real 1 GiB TUS/signed uploads, authoritative
+server-side probing, FFmpeg in real browsers, and mobile/device behavior
+require external integration verification.
 
 Live streaming and video editing are not part of this phase.

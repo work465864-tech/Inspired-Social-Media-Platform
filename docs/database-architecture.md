@@ -177,8 +177,8 @@ folder; video assets use `<owner-uuid>/<video-uuid>/<filename>`.
 | Bucket              |          Privacy |   Limit | Allowed MIME types                   | Policy                                                                                     |
 | ------------------- | ---------------: | ------: | ------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `avatars`           | Public, existing |   5 MiB | JPEG, PNG, WebP                      | Existing profile-owner policies are unchanged.                                             |
-| `videos-original`   |          Private | 500 MiB | MP4, QuickTime, WebM                 | Owner can access draft originals; writes require a matching owned draft.                   |
-| `videos-compressed` |          Private | 500 MiB | MP4, WebM                            | Read follows `can_view_video` or report-scoped moderation; writes are trusted-worker-only. |
+| `videos-original`   |          Private |   1 GiB | MP4, QuickTime, WebM                 | Owner can access draft originals; writes require a matching owned draft.                   |
+| `videos-compressed` |          Private |   1 GiB | MP4, WebM                            | Read follows `can_view_video` or report-scoped moderation; writes are trusted-worker-only. |
 | `thumbnails`        |          Private |   5 MiB | JPEG, PNG, WebP                      | Read follows `can_view_video` or report-scoped moderation; writes are trusted-worker-only. |
 | `chat-media`        |          Private |  50 MiB | JPEG, PNG, WebP, MP4, MPEG/MP4 audio | Owner-prefix only until a chat membership schema exists.                                   |
 | `documents`         |          Private |  10 MiB | PDF                                  | Owner-prefix only.                                                                         |

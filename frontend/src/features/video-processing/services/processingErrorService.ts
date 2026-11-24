@@ -46,10 +46,7 @@ export function normalizeProcessingError(
     if (
       error.code === 'corrupted_file' ||
       error.code === 'unsupported_format' ||
-      error.code === 'file_too_large' ||
-      error.code === 'duration_exceeded' ||
-      error.code === 'resolution_too_low' ||
-      error.code === 'resolution_exceeded'
+      error.code === 'file_too_large'
     ) {
       return new VideoProcessingError('invalid_media', error.message);
     }

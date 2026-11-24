@@ -4,9 +4,9 @@
 
 The Creator Studio lives at `/creator-studio` and provides overview metrics,
 analytics, content management, drafts/upload history, and future-ready
-scheduled-post and moderation tabs. The public, read-only creator route is
-`/profile/[username]`. The existing `/profile` route remains the signed-in
-profile editor.
+scheduled-post and moderation tabs. The public creator route is
+`/profile/[username]`. `/profile` redirects the signed-in owner to that public
+route; account editing lives at `/settings/profile`.
 
 Creator content can be searched, filtered by status, sorted, paginated, edited
 (title, caption, visibility, hashtags), and soft-deleted. API routes derive the
@@ -90,9 +90,17 @@ variables. Never use `NEXT_PUBLIC_*` names for either secret. The migration
 does not yet define automatic retention or partition pruning; deployment
 owners should set a retention policy before collecting production telemetry.
 
-Public profile video queries use the session-bound Supabase client and
-existing video RLS. Private-account content remains subject to those policies.
-The profile page displays up to 24 viewable videos; pagination is a follow-up.
+Public profile video queries use the session-bound Supabase client, filter
+`videos.user_id` to the profile owner, return ready/non-deleted videos newest
+first, and rely on existing video RLS for visibility. Results are paginated 24
+at a time; each card includes a signed thumbnail URL, duration, and engagement
+counts. The profile includes follower/following totals and visible-video
+likes/views totals. The views total is returned by
+`get_public_creator_stats` after applying
+`20261123110000_public_profile_views_stat.sql`. A successful upload links to
+the public profile, which is dynamically rendered and fetches fresh data.
+Reposts is a placeholder. The owner-only Likes tab displays the owner's
+liked, currently viewable videos.
 
 ## Main implementation areas
 
@@ -100,8 +108,8 @@ The profile page displays up to 24 viewable videos; pagination is a follow-up.
   ingestion and snapshot services.
 - `features/creator-studio`: dashboard UI, charts, hooks, owner-scoped services,
   content editor and draft/history modules.
-- `features/public-profile`: profile query, read-only profile, future-ready
-  tabs, and visit tracking.
+- `features/public-profile`: profile query, public creator page and actions,
+  video grid, placeholder tabs, and visit tracking.
 - `app/api/creator-analytics/events` and `app/api/creator-studio`: authenticated
   API routes.
 

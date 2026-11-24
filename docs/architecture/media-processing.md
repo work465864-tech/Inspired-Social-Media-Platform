@@ -7,15 +7,19 @@ components consume a provider-independent `VideoProcessingResult`.
 
 ## Pipeline
 
-1. Validate file size, extension, MIME hint, container signature, browser
-   decodability, duration, and resolution.
-2. Lazily load the cached FFmpeg WebAssembly worker and extract stream metadata:
-   duration, dimensions, aspect ratio, codecs, frame rate, bitrate, and source
-   size.
-3. Validate the probed metadata and compress to MP4 using a 480p, 720p, or
-   1080p profile. Output sizing preserves aspect ratio and is even-dimensioned
-   for encoder compatibility; bitrate caps bound output size.
-4. Generate JPEG thumbnail and poster variants, then a short preview clip.
+1. Validate non-empty file size, extension, and container signature. MIME is a
+   hint only. The 1 GiB cap mirrors Supabase bucket settings; duration and
+   resolution have no application cutoff.
+2. Read HTML video metadata on a best-effort basis, then load the cached FFmpeg
+   WebAssembly worker and probe the source. FFmpeg dimensions/duration are
+   preferred; browser values fill fields omitted by FFmpeg.
+3. Generate JPEG thumbnail/poster variants and a short preview clip. Browser
+   thumbnail decoding is preferred, with an FFmpeg frame-extraction fallback.
+   The browser path scales directly into bounded canvases rather than
+   allocating a full-resolution canvas.
+4. Compress to MP4 using a 480p, 720p, or 1080p profile. Output sizing
+   preserves aspect ratio and is even-dimensioned for encoder compatibility;
+   bitrate is reduced for long videos to target the 1 GiB derivative limit.
    The upload dialog lets the user scrub the source video and regenerate the
    thumbnail from a selected frame.
 5. Return the compressed video, dimensions, metadata, generated assets, and a
@@ -23,8 +27,9 @@ components consume a provider-independent `VideoProcessingResult`.
 
 Supported input containers are MP4, MOV, WebM, and M4V. M4V originals are
 stored with the compatible `video/mp4` MIME type. Unsupported extensions,
-signature mismatches, unsupported codecs, invalid metadata, worker failures,
-and memory-limit errors are surfaced through typed processing errors.
+signature mismatches, invalid metadata, unsupported FFmpeg decoders, worker
+failures, and memory-limit errors are surfaced through typed processing
+errors.
 
 ## Runtime and performance
 
@@ -34,8 +39,10 @@ Compression and metadata probing run in FFmpeg's worker, and the same FFprobe
 metadata is passed to compression to avoid a second metadata probe. Operations
 are serialized around the shared FFmpeg filesystem, temporary job files are
 cleaned after each operation, and abort signals terminate active processing.
-The browser handles lightweight file validation and frame display; no separate
-FFmpeg instance is created by the UI.
+The browser handles lightweight signature validation and frame display; no
+separate FFmpeg instance is created by the UI. FPS and bitrate are descriptive
+metadata, not rejection rules. Aspect ratio is preserved during scaling, not
+validated against a fixed allowlist.
 
 ## Metadata trust boundary
 
@@ -54,9 +61,11 @@ a security boundary.
 
 ## Verification
 
-Focused tests cover M4V MIME recognition, metadata validation limits, and
-pipeline ordering/metadata reuse. Lint, TypeScript, full test, and production
-build commands should be run from `frontend`. Authenticated Supabase Storage
-and real-browser/device behavior need deployment-level verification.
+Focused tests cover MIME-hint tolerance, browser-to-FFmpeg metadata fallback,
+long-duration/high-resolution metadata, adaptive bitrate, and pipeline
+ordering/metadata reuse. Lint, TypeScript, full test, and production build
+commands should be run from `frontend`. Authenticated Supabase Storage,
+project-level upload limits, a real 1 GiB file, and browser/device behavior
+need deployment-level verification.
 
 Live streaming and AI editing are out of scope.

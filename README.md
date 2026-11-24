@@ -54,6 +54,11 @@ comments, and expose follow controls on creator profiles and feed cards. See the
 Authenticated users can upload MP4, MOV, WebM, and M4V videos through a
 browser-side FFmpeg WebAssembly pipeline with metadata inspection, selectable
 thumbnail frames, compression profiles, and signed Supabase Storage uploads.
+Video durations and source resolutions have no application cutoff. The video
+bucket limit is 1 GiB per stored object; apply
+`20261123100000_expand_video_upload_limit.sql` and set the Supabase project
+upload limit to at least 1 GiB. Compression reduces bitrate for long videos to
+target the derivative limit.
 Client-probed dimensions and duration are not persisted as trusted server
 metadata; server-side media probing remains a production-hardening follow-up.
 See the [upload system architecture](./docs/architecture/upload-system.md) and
@@ -61,9 +66,14 @@ See the [upload system architecture](./docs/architecture/upload-system.md) and
 
 The Creator Studio provides owner-scoped content management, dashboard
 analytics, upload history, and a public `/profile/[username]` creator page.
-Authenticated playback, impressions, shares, and profile visits are recorded
-through a bounded client queue and a server-validated Supabase pipeline. See
-the [Creator Studio architecture](./docs/architecture/creator-studio.md).
+Public profiles show creator details, visibility-aware video and engagement
+stats, and newest-first paginated videos; profile editing lives separately at
+`/settings/profile`. Apply
+`20261123110000_public_profile_views_stat.sql` after the Creator Analytics
+migration to expose total profile views. Authenticated playback, impressions,
+shares, and profile visits are recorded through a bounded client queue and a
+server-validated Supabase pipeline. See the
+[Creator Studio architecture](./docs/architecture/creator-studio.md).
 
 ## Deploy to Netlify
 
@@ -141,7 +151,10 @@ Apply all migrations in filename order using the Supabase CLI or SQL Editor:
 13. `supabase/migrations/20261120040000_explore_discovery_indexes.sql`
 14. `supabase/migrations/20261120100000_upload_video_metadata.sql`
 15. `supabase/migrations/20261120110000_follows_realtime.sql`
-16. `supabase/migrations/20261122190000_suggested_profiles_rpc.sql`
+16. `supabase/migrations/20261121100000_creator_analytics.sql`
+17. `supabase/migrations/20261122190000_suggested_profiles_rpc.sql`
+18. `supabase/migrations/20261123100000_expand_video_upload_limit.sql`
+19. `supabase/migrations/20261123110000_public_profile_views_stat.sql`
 
 The Realtime migrations depend on the tables created by
 `20261117100000_social_core_schema.sql`. If the likes Realtime migration reports

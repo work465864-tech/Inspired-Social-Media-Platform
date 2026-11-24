@@ -35,6 +35,10 @@
 - Added authenticated video uploads with format, size, duration, and resolution
   validation; FFmpeg compression; preview/thumbnail generation; cancellable
   resumable Supabase Storage uploads; and server-side draft finalization.
+- Added best-effort HTML-to-FFmpeg metadata fallback, FFmpeg thumbnail fallback,
+  bounded thumbnail canvases, dimension diagnostics, and adaptive long-video
+  compression bitrates. Removed duration and resolution cutoffs and raised the
+  Supabase per-object video limit to 1 GiB.
 - Added upload title, description, visibility, comment settings, and hashtag
   metadata using a narrow videos-table migration and existing hashtag tables.
 - Fixed FFmpeg initialization by excluding public `.wasm` assets from the

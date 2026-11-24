@@ -1,9 +1,6 @@
 export type UploadErrorCode =
   | 'unsupported_format'
   | 'file_too_large'
-  | 'duration_exceeded'
-  | 'resolution_too_low'
-  | 'resolution_exceeded'
   | 'corrupted_file'
   | 'unsupported_codec'
   | 'thumbnail_failed'

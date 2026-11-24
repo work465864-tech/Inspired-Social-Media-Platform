@@ -111,6 +111,7 @@ export function useVideoUpload() {
       try {
         const generated = await generateThumbnail(
           preparedVideo.original,
+          preparedVideo.sourceFormat,
           preparedVideo.metadata.durationMs,
           captureTimeMs,
         );

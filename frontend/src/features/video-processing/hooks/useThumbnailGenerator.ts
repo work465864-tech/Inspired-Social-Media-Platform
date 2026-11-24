@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { thumbnailGenerator } from '../services/thumbnailGenerator';
 import { normalizeProcessingError } from '../services/processingErrorService';
 import type { GeneratedThumbnails } from '../types/processing';
+import type { VideoFormat } from '../../upload/constants/uploadConfig';
 
 export function useThumbnailGenerator() {
   const controllerRef = useRef<AbortController | null>(null);
@@ -22,7 +23,12 @@ export function useThumbnailGenerator() {
   );
 
   const generate = useCallback(
-    async (file: File, durationMs: number, captureTimeMs?: number) => {
+    async (
+      file: File,
+      sourceFormat: VideoFormat,
+      durationMs: number,
+      captureTimeMs?: number,
+    ) => {
       controllerRef.current?.abort();
       const controller = new AbortController();
       controllerRef.current = controller;
@@ -32,6 +38,7 @@ export function useThumbnailGenerator() {
       try {
         const result = await thumbnailGenerator.generate(
           file,
+          sourceFormat,
           durationMs,
           controller.signal,
           captureTimeMs,

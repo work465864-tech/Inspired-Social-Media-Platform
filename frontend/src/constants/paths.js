@@ -6,6 +6,7 @@ export const paths = {
   upload: '/upload',
   creatorStudio: '/creator-studio',
   creatorProfile: (username) => `/profile/${encodeURIComponent(username)}`,
+  profileSettings: '/settings/profile',
   messages: '/messages',
   notifications: '/notifications',
   bookmarks: '/bookmarks',

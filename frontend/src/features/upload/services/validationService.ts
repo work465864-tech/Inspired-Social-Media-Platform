@@ -1,17 +1,15 @@
-import {
-  acceptedVideoFormats,
-  uploadLimits,
-  type VideoFormat,
-} from '../constants/uploadConfig';
+import { uploadLimits, type VideoFormat } from '../constants/uploadConfig';
 import type { VideoProbeMetadata } from '../types/upload';
 import type { MediaMetadata } from '../../../types/media';
 import { VideoUploadError } from './uploadErrorService';
 
 export type VideoValidationOptions = {
   maxFileSizeBytes?: number;
-  maxDurationSeconds?: number;
-  minResolution?: number;
-  maxResolution?: number;
+};
+
+export type BrowserMetadataProbe = {
+  metadata: VideoProbeMetadata | null;
+  metadataIssue: string | null;
 };
 
 function getFormat(file: File): VideoFormat {
@@ -28,14 +26,6 @@ function getFormat(file: File): VideoFormat {
     );
   }
 
-  const format = acceptedVideoFormats[extension];
-  const acceptedMimeTypes: readonly string[] = format.acceptedMimeTypes;
-  if (file.type && !acceptedMimeTypes.includes(file.type)) {
-    throw new VideoUploadError(
-      'unsupported_format',
-      'The selected file type does not match its video format.',
-    );
-  }
   return extension;
 }
 
@@ -73,7 +63,7 @@ async function validateSignature(file: File, format: VideoFormat) {
 function readVideoMetadata(
   file: File,
   signal: AbortSignal,
-): Promise<VideoProbeMetadata> {
+): Promise<BrowserMetadataProbe> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
       reject(
@@ -87,12 +77,10 @@ function readVideoMetadata(
     let settled = false;
     const timeout = window.setTimeout(() => {
       finish(() =>
-        reject(
-          new VideoUploadError(
-            'corrupted_file',
-            'The video metadata could not be read.',
-          ),
-        ),
+        resolve({
+          metadata: null,
+          metadataIssue: 'HTML video metadata timed out after 20 seconds.',
+        }),
       );
     }, 20_000);
 
@@ -128,32 +116,32 @@ function readVideoMetadata(
         video.videoHeight <= 0
       ) {
         finish(() =>
-          reject(
-            new VideoUploadError(
-              'corrupted_file',
-              'The selected file does not contain a readable video stream.',
-            ),
-          ),
+          resolve({
+            metadata: null,
+            metadataIssue: `HTML video metadata returned invalid duration or dimensions (${video.videoWidth} × ${video.videoHeight}).`,
+          }),
         );
         return;
       }
 
       finish(() =>
         resolve({
-          durationMs,
-          width: video.videoWidth,
-          height: video.videoHeight,
+          metadata: {
+            durationMs,
+            width: video.videoWidth,
+            height: video.videoHeight,
+          },
+          metadataIssue: null,
         }),
       );
     };
     video.onerror = () =>
       finish(() =>
-        reject(
-          new VideoUploadError(
-            'corrupted_file',
-            'The video is damaged or cannot be decoded by this browser.',
-          ),
-        ),
+        resolve({
+          metadata: null,
+          metadataIssue:
+            'The browser could not decode HTML video metadata; FFmpeg will inspect the file instead.',
+        }),
       );
 
     signal.addEventListener('abort', abort, { once: true });
@@ -161,34 +149,21 @@ function readVideoMetadata(
   });
 }
 
-export function validateVideoResolution(
-  width: number,
-  height: number,
-  minResolution: number = uploadLimits.minResolution,
-  maxResolution: number = uploadLimits.maxResolution,
-): void {
-  if (Math.min(width, height) < minResolution) {
+export function validateVideoResolution(width: number, height: number): void {
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
     throw new VideoUploadError(
-      'resolution_too_low',
-      `Videos must be at least ${minResolution} pixels on their shorter side.`,
-    );
-  }
-  if (width > maxResolution || height > maxResolution) {
-    throw new VideoUploadError(
-      'resolution_exceeded',
-      'The video resolution exceeds the supported limit.',
+      'corrupted_file',
+      `Invalid video dimensions: width=${width}, height=${height}. Expected positive whole-pixel values from FFmpeg or browser metadata.`,
     );
   }
 }
 
-export function validateMediaMetadata(
-  metadata: MediaMetadata,
-  options: VideoValidationOptions = {},
-): void {
-  const maxDurationSeconds =
-    options.maxDurationSeconds ?? uploadLimits.maxDurationSeconds;
-  const minResolution = options.minResolution ?? uploadLimits.minResolution;
-  const maxResolution = options.maxResolution ?? uploadLimits.maxResolution;
+export function validateMediaMetadata(metadata: MediaMetadata): void {
   if (
     !Number.isInteger(metadata.width) ||
     !Number.isInteger(metadata.height) ||
@@ -197,25 +172,16 @@ export function validateMediaMetadata(
   ) {
     throw new VideoUploadError(
       'corrupted_file',
-      'The video dimensions could not be verified.',
+      `Invalid video dimensions: width=${metadata.width}, height=${metadata.height}. Expected positive whole-pixel values from FFmpeg or browser metadata.`,
     );
   }
-  if (
-    !Number.isFinite(metadata.durationMs) ||
-    metadata.durationMs <= 0 ||
-    metadata.durationMs > maxDurationSeconds * 1000
-  ) {
+  if (!Number.isFinite(metadata.durationMs) || metadata.durationMs <= 0) {
     throw new VideoUploadError(
-      'duration_exceeded',
-      `Videos must be ${Math.floor(maxDurationSeconds / 60)} minutes or shorter.`,
+      'corrupted_file',
+      'FFmpeg could not determine a valid video duration.',
     );
   }
-  validateVideoResolution(
-    metadata.width,
-    metadata.height,
-    minResolution,
-    maxResolution,
-  );
+  validateVideoResolution(metadata.width, metadata.height);
   if (!Number.isFinite(metadata.fileSizeBytes) || metadata.fileSizeBytes <= 0) {
     throw new VideoUploadError(
       'corrupted_file',
@@ -229,13 +195,14 @@ export const validationService = {
     file: File,
     signal: AbortSignal,
     options: VideoValidationOptions = {},
-  ): Promise<{ format: VideoFormat; metadata: VideoProbeMetadata }> {
+  ): Promise<
+    {
+      format: VideoFormat;
+      metadata: VideoProbeMetadata | null;
+    } & BrowserMetadataProbe
+  > {
     const maxFileSizeBytes =
       options.maxFileSizeBytes ?? uploadLimits.maxFileSizeBytes;
-    const maxDurationSeconds =
-      options.maxDurationSeconds ?? uploadLimits.maxDurationSeconds;
-    const minResolution = options.minResolution ?? uploadLimits.minResolution;
-    const maxResolution = options.maxResolution ?? uploadLimits.maxResolution;
 
     if (file.size <= 0) {
       throw new VideoUploadError(
@@ -246,27 +213,28 @@ export const validationService = {
     if (file.size > maxFileSizeBytes) {
       throw new VideoUploadError(
         'file_too_large',
-        `Choose a video smaller than ${Math.floor(maxFileSizeBytes / 1024 / 1024)} MB.`,
+        `Choose a video no larger than ${Math.floor(maxFileSizeBytes / 1024 / 1024)} MB.`,
       );
     }
 
     const format = getFormat(file);
     await validateSignature(file, format);
-    const metadata = await readVideoMetadata(file, signal);
-
-    if (metadata.durationMs > maxDurationSeconds * 1000) {
-      throw new VideoUploadError(
-        'duration_exceeded',
-        `Videos must be ${Math.floor(maxDurationSeconds / 60)} minutes or shorter.`,
-      );
+    let browserMetadata: BrowserMetadataProbe;
+    try {
+      browserMetadata = await readVideoMetadata(file, signal);
+    } catch (error) {
+      if (signal.aborted) {
+        throw new VideoUploadError(
+          'cancelled',
+          'Video validation was cancelled.',
+        );
+      }
+      const detail = error instanceof Error ? `: ${error.message}` : '';
+      browserMetadata = {
+        metadata: null,
+        metadataIssue: `HTML video metadata could not be read${detail}.`,
+      };
     }
-    validateVideoResolution(
-      metadata.width,
-      metadata.height,
-      minResolution,
-      maxResolution,
-    );
-
-    return { format, metadata };
+    return { format, ...browserMetadata };
   },
 };
